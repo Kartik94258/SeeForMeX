@@ -14,7 +14,6 @@ from functools import lru_cache
 from io import BytesIO
 from typing import Any
 
-from PIL import Image
 
 
 @dataclass
@@ -128,6 +127,7 @@ class YoloObjectDetector:
 
     def detect(self, jpeg_bytes: bytes) -> tuple[int, int, list[Detection]]:
         try:
+            from PIL import Image
             image = Image.open(BytesIO(jpeg_bytes)).convert("RGB")
         except Exception as exc:
             raise ValueError("Could not decode the JPEG frame.") from exc
