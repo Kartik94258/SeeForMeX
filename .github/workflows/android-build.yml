@@ -9,6 +9,12 @@ on:
       - "android/**"
       - ".github/workflows/android-build.yml"
   workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: "Backend base URL (use http://<Windows-PC-LAN-IP>:8000/ for a trusted local Wi-Fi test, or HTTPS for hosted backend)"
+        required: false
+        default: "http://10.0.2.2:8000/"
+        type: string
 
 jobs:
   build:
@@ -29,7 +35,9 @@ jobs:
           gradle-version: "8.9"
 
       - name: Build debug APK
-        run: gradle -p android assembleDebug
+        env:
+          API_BASE_URL: ${{ inputs.api_base_url || 'http://10.0.2.2:8000/' }}
+        run: gradle -p android "-PSEEFORME_API_BASE_URL=${API_BASE_URL}" assembleDebug
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
