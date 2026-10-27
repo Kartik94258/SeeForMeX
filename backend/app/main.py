@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from .perception import Detection, get_object_detector, tracker_pool
+
 load_dotenv()
 
 app = FastAPI(
@@ -41,6 +43,33 @@ class AnalyzeResponse(BaseModel):
     answer: str
     mode: AnalysisMode
     safety_notice: str = "AI can be wrong. Do not rely on this response for safe navigation or collision avoidance."
+
+
+class PerceptionRequest(BaseModel):
+    image_base64: str = Field(min_length=1, description="Base64-encoded JPEG frame")
+    session_id: str = Field(
+        min_length=8,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9_-]+$",
+        description="Random client-generated session ID; never a user identity",
+    )
+
+
+class PerceivedObject(BaseModel):
+    class_name: str
+    confidence: float
+    bbox: list[float] = Field(min_length=4, max_length=4, description="Normalized x1,y1,x2,y2 coordinates")
+    track_id: int | None = None
+
+
+class PerceptionResponse(BaseModel):
+    frame_width: int
+    frame_height: int
+    objects: list[PerceivedObject]
+    limitation: str = (
+        "Labels describe this frame only. Track IDs are approximate; this endpoint does not "
+        "measure distance, detect every obstacle, or establish that a path is safe."
+    )
 
 
 MAX_IMAGE_BYTES = int(os.getenv("MAX_IMAGE_BYTES", str(8 * 1024 * 1024)))
@@ -96,6 +125,31 @@ def _client():
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "seeforme-x-api"}
+
+
+@app.post("/v1/perception", response_model=PerceptionResponse)
+def perception(body: PerceptionRequest) -> PerceptionResponse:
+    """Detect common objects and attach best-effort IDs across nearby frames."""
+    image_bytes = _decode_jpeg(body.image_base64)
+    try:
+        width, height, detections = get_object_detector().detect(image_bytes)
+        tracker_pool.update(body.session_id, detections)
+    except ValueError as exc:
+        raise HTTPException(status_code=415, detail="Could not decode the JPEG frame.") from exc
+    except RuntimeError as exc:
+        # Expose actionable setup errors, not raw model/provider internals.
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    objects = [
+        PerceivedObject(
+            class_name=item.class_name,
+            confidence=item.confidence,
+            bbox=item.bbox,
+            track_id=item.track_id,
+        )
+        for item in detections
+    ]
+    return PerceptionResponse(frame_width=width, frame_height=height, objects=objects)
 
 
 @app.post("/v1/analyze", response_model=AnalyzeResponse)
