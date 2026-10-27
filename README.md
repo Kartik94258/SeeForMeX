@@ -78,7 +78,7 @@ The backend now includes an **optional** YOLO object-perception endpoint. This i
 - `POST /v1/perception` accepts a JPEG frame plus a random client-generated `session_id`.
 - Returns common object labels, confidence values, normalized bounding boxes, and best-effort track IDs across nearby frames.
 - Tracking state is in memory, expires after inactivity, and is local to one backend process. IDs can switch or reset.
-- The Android app is **not yet wired to send continuous frames**; its current UI remains explicit photo capture → analysis → speech.
+- Android now has an explicit **Start live mode / Stop live mode** control that samples a frame roughly every 2.5 seconds and sends it to this endpoint until stopped. Frame requests are sequential; labels are spoken only when the summary changes.
 - The endpoint does not estimate real-world distance or determine that a path is clear. Do not use these labels for collision avoidance or independent mobility.
 
 To enable it locally, from `backend/` after installing the normal requirements:
@@ -105,9 +105,9 @@ The endpoint is available at `POST /v1/perception`. Keep the API on a trusted de
 
 1. **Foundation (current):** Android camera capture, vision Q&A, OCR-style text reading, Hindi/English prompt selection, voice input/output, FastAPI and tests.
 2. **Perception (backend preview):** YOLO boxes and approximate short-lived track IDs across supplied frames.
-3. **Live mode (next):** CameraX frame sampling with strict rate limits, cancellation/backpressure, pause control, battery/thermal checks, and spoken updates only when the scene meaningfully changes.
-4. **Visual memory:** opt-in, short-lived text notes about prior observations; no image retention by default and a clear reset control.
-5. **Contextual conversation:** follow-up questions using the current frame and recent opt-in notes, with uncertainty surfaced in responses.
+3. **Live mode (prototype):** sampled CameraX captures and explicit start/stop are implemented; still needs device tests, network cancellation review, battery/thermal testing, and tuning for frame rate.
+4. **Visual memory (prototype):** opt-in text-only notes, bounded to 8 observations per session and 15 minutes, with a clear control; held in backend process memory only.
+5. **Contextual conversation (prototype):** follow-up questions can use prior same-session notes as tentative context; this still needs real-device integration testing.
 6. **Hardening:** authentication, rate limits, deployment secrets, HTTPS, device testing, TalkBack, low-network behavior, privacy review, and a documented demo.
 
 Avoid claiming the system detects every obstacle. Do not rely on it for street crossing, stairs, traffic, or collision avoidance; retain a cane, guide dog, and other trusted mobility supports.
