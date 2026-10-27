@@ -1,0 +1,5 @@
+# Optional dependencies for object detection / frame-to-frame tracking.
+# Install after backend/requirements.txt. First model load may download weights if
+# YOLO_MODEL_PATH is not present locally.
+ultralytics>=8.3.0,<9.0.0
+Pillow>=10.0.0
