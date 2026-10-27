@@ -14,7 +14,7 @@ Native Android MVP for voice-first visual assistance. This starter is intentiona
 - Stateless processing; no image or conversation persistence by this application
 - Accessible labels, large touch targets, visible status and error messages
 
-Out of scope for the first 1–2 weeks: continuous streaming, stored visual memory, GPS routing, object tracking across frames, automatic hazard avoidance, accounts, and cloud image storage.
+Still to build for the advanced vision shown in the concept: continuous Android camera sampling, recent visual memory, contextual voice follow-ups, and an Android live-mode UI. Automatic hazard avoidance, GPS routing, and identity tracking are intentionally not promised.
 
 ## Architecture
 
@@ -69,6 +69,48 @@ pytest -q
 7. Run on a device with a camera. Grant camera access. Capture a photo, choose Describe / Read text / Ask, and press Analyze. For voice input, use the microphone control.
 
 The backend defaults to `OPENAI_MODEL=gpt-4.1-mini`, a vision-capable model; change it in the backend environment if you use another model available to your API project. The Android project points at the emulator URL by default. Do not ship a build using a local development URL.
+
+
+## Advanced perception checkpoint (backend preview)
+
+The backend now includes an **optional** YOLO object-perception endpoint. This is a foundation for live mode, not the finished live assistant:
+
+- `POST /v1/perception` accepts a JPEG frame plus a random client-generated `session_id`.
+- Returns common object labels, confidence values, normalized bounding boxes, and best-effort track IDs across nearby frames.
+- Tracking state is in memory, expires after inactivity, and is local to one backend process. IDs can switch or reset.
+- The Android app is **not yet wired to send continuous frames**; its current UI remains explicit photo capture → analysis → speech.
+- The endpoint does not estimate real-world distance or determine that a path is clear. Do not use these labels for collision avoidance or independent mobility.
+
+To enable it locally, from `backend/` after installing the normal requirements:
+
+```bash
+pip install -r requirements-perception.txt
+# Optional: set YOLO_MODEL_PATH to a local compatible Ultralytics model file.
+# By default, Ultralytics attempts to use yolov8n.pt and may download weights on first load.
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Example request body (use actual base64 JPEG data):
+
+```json
+{
+  "image_base64": "<base64-encoded-jpeg>",
+  "session_id": "a-random-session-id-created-by-the-client"
+}
+```
+
+The endpoint is available at `POST /v1/perception`. Keep the API on a trusted development network; production use needs authentication, rate limiting, HTTPS, resource limits, and an explicit model-download/deployment plan.
+
+## Build roadmap for the full concept
+
+1. **Foundation (current):** Android camera capture, vision Q&A, OCR-style text reading, Hindi/English prompt selection, voice input/output, FastAPI and tests.
+2. **Perception (backend preview):** YOLO boxes and approximate short-lived track IDs across supplied frames.
+3. **Live mode (next):** CameraX frame sampling with strict rate limits, cancellation/backpressure, pause control, battery/thermal checks, and spoken updates only when the scene meaningfully changes.
+4. **Visual memory:** opt-in, short-lived text notes about prior observations; no image retention by default and a clear reset control.
+5. **Contextual conversation:** follow-up questions using the current frame and recent opt-in notes, with uncertainty surfaced in responses.
+6. **Hardening:** authentication, rate limits, deployment secrets, HTTPS, device testing, TalkBack, low-network behavior, privacy review, and a documented demo.
+
+Avoid claiming the system detects every obstacle. Do not rely on it for street crossing, stairs, traffic, or collision avoidance; retain a cane, guide dog, and other trusted mobility supports.
 
 ## Privacy model
 
