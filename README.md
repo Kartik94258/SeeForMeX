@@ -65,7 +65,7 @@ pytest -q
 3. **Wrapper note:** this archive does not include the generated Gradle wrapper scripts/JAR, and Android compilation was not available in the scaffold environment. If Android Studio cannot sync the folder as-is, create a new Empty Activity (Compose) project in Android Studio using package `com.seeforme.x` and minimum SDK 26. Keep the newly generated `gradlew`, `gradlew.bat`, and `gradle/wrapper/` files, then copy this archive's `app/src/` and `app/build.gradle.kts` into that project and apply the root Gradle plugin versions/settings from this archive.
 4. Start the backend on your computer.
 5. **Android Emulator:** the default backend URL is `http://10.0.2.2:8000/`.
-6. **Physical phone:** make sure both devices are on the same trusted network and set the API base URL to your computer's LAN IP, e.g. build with `-PSEEFORME_API_BASE_URL=http://192.168.1.20:8000/` once the Gradle wrapper is available. Change the sample IP. Debug builds permit HTTP for local development; release builds default to HTTPS-only.
+6. **Physical phone:** make sure the phone and computer are on the same trusted Wi-Fi, start the backend with `--host 0.0.0.0`, and use your computer's Wi-Fi IPv4 address (from `ipconfig`), e.g. `http://192.168.1.20:8000/`. Replace the sample IP. Debug builds permit HTTP for local testing; release builds default to HTTPS-only.
 7. Run on a device with a camera. Grant camera access. Capture a photo, choose Describe / Read text / Ask, and press Analyze. For voice input, use the microphone control.
 
 The backend defaults to `OPENAI_MODEL=gpt-4.1-mini`, a vision-capable model; change it in the backend environment if you use another model available to your API project. The Android project points at the emulator URL by default. Do not ship a build using a local development URL.
@@ -111,6 +111,17 @@ The endpoint is available at `POST /v1/perception`. Keep the API on a trusted de
 6. **Hardening:** authentication, rate limits, deployment secrets, HTTPS, device testing, TalkBack, low-network behavior, privacy review, and a documented demo.
 
 Avoid claiming the system detects every obstacle. Do not rely on it for street crossing, stairs, traffic, or collision avoidance; retain a cane, guide dog, and other trusted mobility supports.
+
+
+### Build a phone-configured APK using GitHub Actions
+
+1. Start the backend on your Windows PC and find its Wi-Fi IPv4 address with `ipconfig`.
+2. Open [Android debug APK workflow](https://github.com/Kartik94258/SeeForMeX/actions/workflows/android-build.yml) and choose **Run workflow**.
+3. Enter `http://YOUR-PC-LAN-IP:8000/` in `api_base_url` (include the trailing slash), then start the workflow.
+4. Open the successful run, download the `seeforme-x-debug-apk` artifact, unzip it, and install `app-debug.apk` on the phone.
+5. Keep both devices on a trusted private Wi-Fi network. Allow the backend through the Windows private-network firewall if prompted. Do not expose this unauthenticated development API directly to the public internet.
+
+The default downloaded APK targets the Android emulator (`10.0.2.2`). Use the manual workflow input to build an APK for a physical phone or a hosted HTTPS backend.
 
 ## Privacy model
 
