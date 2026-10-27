@@ -12,10 +12,16 @@ No database is used in the first milestone. The request sets store=false, and th
 ## Vision response safety
 The prompt tells the model to state uncertainty, not to present image interpretation as guaranteed obstacle clearance or medical advice, and to avoid identifying people.
 
+## Advanced perception preview
+
+The optional `/v1/perception` route runs Ultralytics YOLO when `backend/requirements-perception.txt` is installed. It returns normalized boxes and best-effort, short-lived track IDs keyed by a random session ID. The tracker is in-process memory only and is not shared between workers or restarts. The Android app does not yet continuously upload camera frames to this route.
+
+This endpoint labels objects; it does not estimate calibrated distance, determine traversability, or provide collision warnings. Do not translate object labels into a statement that the path is safe.
+
 ## Not in first release
 - No navigation commands or turn-by-turn instructions.
 - No claim that estimated depth is a collision sensor.
-- No persistent visual memory.
+- No persistent visual memory; a future implementation should be opt-in, text-only by default, time-bounded, and explicitly clearable.
 - No continuous camera recording.
 
 ## Next architecture evolution
