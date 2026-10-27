@@ -51,6 +51,41 @@ object AnalyzeClient {
         }
     }
 
+
+    /** Analyze one sampled live frame with the optional YOLO perception endpoint. */
+    suspend fun perceive(photo: File, sessionId: String): List<String> = withContext(Dispatchers.IO) {
+        val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
+        if (!baseUrl.startsWith("https://") && !baseUrl.startsWith("http://")) {
+            throw IOException("Backend URL is not configured correctly.")
+        }
+        val jpegBytes = compressJpeg(photo)
+        val payload = JSONObject()
+            .put("image_base64", Base64.encodeToString(jpegBytes, Base64.NO_WRAP))
+            .put("session_id", sessionId)
+            .toString()
+        val request = Request.Builder()
+            .url("$baseUrl/v1/perception")
+            .post(payload.toRequestBody("application/json; charset=utf-8".toMediaType()))
+            .build()
+        http.newCall(request).execute().use { response ->
+            val bodyText = response.body?.string().orEmpty()
+            val json = runCatching { JSONObject(bodyText) }.getOrNull()
+            if (!response.isSuccessful) {
+                val detail = json?.optString("detail")?.takeIf { it.isNotBlank() }
+                throw IOException(detail ?: "Live perception failed (HTTP ${response.code}). Check the backend setup.")
+            }
+            val objects = json?.optJSONArray("objects")
+            val labels = mutableListOf<String>()
+            if (objects != null) {
+                for (i in 0 until objects.length()) {
+                    val label = objects.optJSONObject(i)?.optString("class_name")?.trim().orEmpty()
+                    if (label.isNotBlank() && label !in labels) labels.add(label)
+                }
+            }
+            labels.take(6)
+        }
+    }
+
     /** Resize the captured image in memory before sending to keep mobile payloads manageable. */
     private fun compressJpeg(file: File): ByteArray {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
