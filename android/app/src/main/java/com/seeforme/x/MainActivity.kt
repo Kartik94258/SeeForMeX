@@ -3,6 +3,7 @@ package com.seeforme.x
 import android.Manifest
 import android.app.Activity
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -68,9 +69,16 @@ import androidx.camera.view.PreviewView
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
+import java.io.IOException
 import java.util.Locale
+import java.util.UUID
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 private val BrandBlue = Color(0xFF155EEF)
 private val PageBackground = Color(0xFFF6F8FC)
@@ -142,6 +150,9 @@ private fun SeeForMeScreen(
     var answer by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("Ready. Capture a photo to get started.") }
     var busy by remember { mutableStateOf(false) }
+    var liveMode by remember { mutableStateOf(false) }
+    var liveSummary by remember { mutableStateOf("") }
+    val liveSessionId = remember { UUID.randomUUID().toString().replace("-", "") }
     var languageTag by remember { mutableStateOf("en-IN") }
 
     val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -176,7 +187,35 @@ private fun SeeForMeScreen(
                 if (cameraGranted) {
                     CameraPreview(
                         modifier = Modifier.fillMaxSize(),
+                        liveMode = liveMode,
                         onCameraError = { status = it },
+                        onLiveError = { message ->
+                            status = message
+                            liveMode = false
+                        },
+                        onLiveFrame = { file ->
+                            try {
+                                val labels = AnalyzeClient.perceive(file, liveSessionId)
+                                val summary = if (labels.isEmpty()) {
+                                    "No common object labels returned. This does not mean the area is clear."
+                                } else {
+                                    "I can see: " + labels.joinToString(", ") + "."
+                                }
+                                if (summary != liveSummary) {
+                                    liveSummary = summary
+                                    status = "Live scene updated. Labels may be wrong or incomplete."
+                                    onSpeak(summary, languageTag)
+                                } else {
+                                    status = "Live mode active. Sampling the camera every few seconds."
+                                }
+                            } catch (error: Exception) {
+                                status = error.message?.takeIf { it.isNotBlank() }
+                                    ?: "Live perception failed. Check that the optional YOLO backend is installed."
+                                liveMode = false
+                            } finally {
+                                file.delete()
+                            }
+                        },
                         onCaptured = { file ->
                             capturedFile?.delete()
                             capturedFile = file
@@ -201,13 +240,14 @@ private fun SeeForMeScreen(
             Button(
                 onClick = {
                     if (!cameraGranted) cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                    else {
+                    else if (!liveMode) {
                         capturedFile?.delete()
                         capturedFile = null
                         answer = ""
                         status = "Ready for a new photo. Use Capture photo in the camera preview."
                     }
                 },
+                enabled = !liveMode,
                 modifier = Modifier.weight(1f).height(56.dp),
                 shape = RoundedCornerShape(16.dp),
             ) {
@@ -224,6 +264,35 @@ private fun SeeForMeScreen(
                 shape = RoundedCornerShape(16.dp),
             ) { Text(if (languageTag == "en-IN") "English" else "हिन्दी", fontSize = 15.sp) }
         }
+
+        Button(
+            onClick = {
+                if (!cameraGranted) {
+                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                } else {
+                    liveMode = !liveMode
+                    liveSummary = ""
+                    if (liveMode) {
+                        status = "Starting live mode. Frames will be sent for object detection until you stop."
+                    } else {
+                        status = "Live mode stopped."
+                        onStopSpeech()
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth().height(58.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = if (liveMode) ButtonDefaults.buttonColors(containerColor = Color(0xFFB42318))
+                else ButtonDefaults.buttonColors(containerColor = BrandBlue),
+        ) {
+            Text(if (liveMode) "Stop live mode" else "Start live mode", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        }
+        Text(
+            if (liveMode) "Live: $liveSummary" else "Live mode sends a sampled camera frame to your configured backend every few seconds after you start it.",
+            fontSize = 14.sp,
+            color = Muted,
+        )
+        Text("Live mode is experimental: labels can be missed or wrong and are not distance estimates or collision warnings.", fontSize = 13.sp, color = Muted)
 
         Text("What do you want help with?", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Ink, modifier = Modifier.semantics { heading() })
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -339,7 +408,10 @@ private fun SeeForMeScreen(
 @Composable
 private fun CameraPreview(
     modifier: Modifier = Modifier,
+    liveMode: Boolean,
     onCameraError: (String) -> Unit,
+    onLiveError: (String) -> Unit,
+    onLiveFrame: suspend (File) -> Unit,
     onCaptured: (File) -> Unit,
 ) {
     val context = LocalContext.current
@@ -353,6 +425,23 @@ private fun CameraPreview(
     LaunchedEffect(controller, lifecycleOwner) {
         try { controller.bindToLifecycle(lifecycleOwner) }
         catch (_: Exception) { onCameraError("Could not start the camera. Close other camera apps and retry.") }
+    }
+    LaunchedEffect(controller, liveMode) {
+        if (!liveMode) return@LaunchedEffect
+        while (isActive) {
+            val frame = try {
+                captureLiveFrame(controller, context)
+            } catch (_: Exception) {
+                onLiveError("Live camera capture failed. Stop live mode and retry.")
+                return@LaunchedEffect
+            }
+            try {
+                onLiveFrame(frame)
+            } finally {
+                frame.delete()
+            }
+            delay(2500L)
+        }
     }
     Box(modifier = modifier) {
         AndroidView(
@@ -378,12 +467,36 @@ private fun CameraPreview(
                     }
                 })
             },
+            enabled = !liveMode,
             modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp).fillMaxWidth().height(56.dp),
             shape = RoundedCornerShape(16.dp),
         ) {
             Icon(Icons.Default.CameraAlt, contentDescription = null)
             Spacer(Modifier.size(8.dp))
-            Text("Capture photo", fontSize = 16.sp)
+            Text(if (liveMode) "Live mode active" else "Capture photo", fontSize = 16.sp)
         }
+    }
+}
+
+private suspend fun captureLiveFrame(
+    controller: LifecycleCameraController,
+    context: Context,
+): File = suspendCancellableCoroutine { continuation ->
+    val target = File(context.cacheDir, "seeforme_live_${System.currentTimeMillis()}.jpg")
+    val output = androidx.camera.core.ImageCapture.OutputFileOptions.Builder(target).build()
+    continuation.invokeOnCancellation { target.delete() }
+    try {
+        controller.takePicture(output, ContextCompat.getMainExecutor(context), object : androidx.camera.core.ImageCapture.OnImageSavedCallback {
+            override fun onImageSaved(outputFileResults: androidx.camera.core.ImageCapture.OutputFileResults) {
+                if (continuation.isActive) continuation.resume(target) else target.delete()
+            }
+            override fun onError(exception: androidx.camera.core.ImageCaptureException) {
+                target.delete()
+                if (continuation.isActive) continuation.resumeWithException(IOException("Live frame capture failed."))
+            }
+        })
+    } catch (error: Exception) {
+        target.delete()
+        if (continuation.isActive) continuation.resumeWithException(error)
     }
 }
