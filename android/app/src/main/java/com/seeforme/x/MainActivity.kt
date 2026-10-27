@@ -152,6 +152,7 @@ private fun SeeForMeScreen(
     var busy by remember { mutableStateOf(false) }
     var liveMode by remember { mutableStateOf(false) }
     var liveSummary by remember { mutableStateOf("") }
+    var rememberObservations by remember { mutableStateOf(false) }
     val liveSessionId = remember { UUID.randomUUID().toString().replace("-", "") }
     var languageTag by remember { mutableStateOf("en-IN") }
 
@@ -294,6 +295,45 @@ private fun SeeForMeScreen(
         )
         Text("Live mode is experimental: labels can be missed or wrong and are not distance estimates or collision warnings.", fontSize = 13.sp, color = Muted)
 
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            Button(
+                onClick = {
+                    rememberObservations = !rememberObservations
+                    status = if (rememberObservations) {
+                        "Temporary text memory enabled. Recent AI answers may be used for follow-up questions."
+                    } else {
+                        "Temporary text memory disabled. New observations will not be saved in session memory."
+                    }
+                },
+                modifier = Modifier.weight(1f).height(54.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = if (rememberObservations) ButtonDefaults.buttonColors(containerColor = Color(0xFF067647))
+                    else ButtonDefaults.buttonColors(containerColor = BrandBlue),
+            ) {
+                Text(if (rememberObservations) "Memory: ON" else "Memory: OFF", fontSize = 15.sp)
+            }
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        try {
+                            AnalyzeClient.clearMemory(liveSessionId)
+                            liveSummary = ""
+                            status = "Temporary visual memory cleared."
+                        } catch (error: Exception) {
+                            status = error.message?.takeIf { it.isNotBlank() } ?: "Could not clear temporary memory."
+                        }
+                    }
+                },
+                modifier = Modifier.weight(1f).height(54.dp),
+                shape = RoundedCornerShape(14.dp),
+            ) { Text("Clear memory", fontSize = 15.sp) }
+        }
+        Text(
+            "Memory is off by default. When enabled, only recent text answers are kept in backend memory for up to 15 minutes; images are not saved by this memory feature. Memory is lost on backend restart.",
+            fontSize = 13.sp,
+            color = Muted,
+        )
+
         Text("What do you want help with?", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Ink, modifier = Modifier.semantics { heading() })
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             VisionMode.values().forEach { mode ->
@@ -356,7 +396,7 @@ private fun SeeForMeScreen(
                     status = "Analyzing the selected photo…"
                     scope.launch {
                         try {
-                            val result = AnalyzeClient.analyze(image, selectedMode.apiValue, question, languageTag)
+                            val result = AnalyzeClient.analyze(image, selectedMode.apiValue, question, languageTag, liveSessionId, rememberObservations)
                             answer = result
                             status = "Analysis complete. Review the answer and listen if helpful."
                             onSpeak(result, languageTag)
