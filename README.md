@@ -107,4 +107,8 @@ The backend defaults to `OPENAI_MODEL=gpt-4.1-mini`, a vision-capable model; cha
 
 ## Build verification status
 
-The backend test suite is included and currently passes in the scaffold environment. Android compilation has not been verified in this environment because Android SDK/Gradle tooling is not installed here; Android Studio must sync dependencies and build the APK on your machine.
+- Backend test workflow: passed in GitHub Actions.
+- Android debug APK: **built successfully** in GitHub Actions after fixing the debug manifest cleartext override.
+- Download the APK from the [Android debug APK workflow run](https://github.com/Kartik94258/SeeForMeX/actions/runs/40579866494), then open the **Artifacts** section and download `seeforme-x-debug-apk`.
+- This is a debug build configured for the Android emulator by default (`http://10.0.2.2:8000/`). For a physical phone, rebuild with the backend LAN/HTTPS URL configured. Do not use a public, untrusted network for the local HTTP debug endpoint.
+- Build success confirms Android compilation/package creation; it does **not** confirm real-device behaviour. Camera capture, backend connectivity, voice input/output, TalkBack accessibility, and privacy flows still require device testing.
