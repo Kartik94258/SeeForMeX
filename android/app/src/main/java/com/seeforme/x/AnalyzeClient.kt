@@ -22,7 +22,14 @@ object AnalyzeClient {
         .callTimeout(55, TimeUnit.SECONDS)
         .build()
 
-    suspend fun analyze(photo: File, mode: String, question: String, languageTagForRequest: String): String = withContext(Dispatchers.IO) {
+    suspend fun analyze(
+        photo: File,
+        mode: String,
+        question: String,
+        languageTagForRequest: String,
+        sessionId: String,
+        remember: Boolean,
+    ): String = withContext(Dispatchers.IO) {
         val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
         if (!baseUrl.startsWith("https://") && !baseUrl.startsWith("http://")) {
             throw IOException("Backend URL is not configured correctly.")
@@ -33,6 +40,8 @@ object AnalyzeClient {
             .put("mode", mode)
             .put("question", question)
             .put("language", if (languageTagForRequest == "hi-IN") "hi" else "en")
+            .put("session_id", sessionId)
+            .put("remember", remember)
             .toString()
         val request = Request.Builder()
             .url("$baseUrl/v1/analyze")
@@ -51,6 +60,21 @@ object AnalyzeClient {
         }
     }
 
+
+
+    suspend fun clearMemory(sessionId: String) = withContext(Dispatchers.IO) {
+        val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
+        val payload = JSONObject().put("session_id", sessionId).toString()
+        val request = Request.Builder()
+            .url("$baseUrl/v1/memory/clear")
+            .post(payload.toRequestBody("application/json; charset=utf-8".toMediaType()))
+            .build()
+        http.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw IOException("Could not clear temporary memory (HTTP ${response.code}).")
+            }
+        }
+    }
 
     /** Analyze one sampled live frame with the optional YOLO perception endpoint. */
     suspend fun perceive(photo: File, sessionId: String): List<String> = withContext(Dispatchers.IO) {
