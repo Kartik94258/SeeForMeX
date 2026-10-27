@@ -14,9 +14,13 @@ The prompt tells the model to state uncertainty, not to present image interpreta
 
 ## Advanced perception preview
 
-The optional `/v1/perception` route runs Ultralytics YOLO when `backend/requirements-perception.txt` is installed. It returns normalized boxes and best-effort, short-lived track IDs keyed by a random session ID. The tracker is in-process memory only and is not shared between workers or restarts. The Android app does not yet continuously upload camera frames to this route.
+The optional `/v1/perception` route runs Ultralytics YOLO when `backend/requirements-perception.txt` is installed. It returns normalized boxes and best-effort, short-lived track IDs keyed by a random session ID. The tracker is in-process memory only and is not shared between workers or restarts. The Android app now has an explicit Start/Stop Live Mode that samples a frame roughly every 2.5 seconds and uploads it until stopped. It is a prototype and needs device/network/battery testing.
 
 This endpoint labels objects; it does not estimate calibrated distance, determine traversability, or provide collision warnings. Do not translate object labels into a statement that the path is safe.
+
+## Ephemeral visual memory
+
+Optional text memory stores recent AI answers only after the user toggles Memory on in the Android UI. It retains at most eight notes per session for up to 15 minutes, stores no images, is clearable via `/v1/memory/clear`, and disappears when the backend process restarts. Memory is not shared between workers and is not durable storage.
 
 ## Not in first release
 - No navigation commands or turn-by-turn instructions.
